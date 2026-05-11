@@ -8,11 +8,11 @@ from telethon.tl.functions.messages import CreateChatRequest
 
 load_dotenv()
 
-API_ID = int(os.getenv("32415663"))
-API_HASH = os.getenv("20df10ed337f4a6b54384859edea1556") 
-BOT_TOKEN = os.getenv("8614020088:AAGCqe2wIIEKimwVzunUIE0JTL3UPzECAH0")
-ADMIN_USERNAME = os.getenv("@Crypto_8099")
-MAIN_GROUP = os.getenv("@escrow_only_usdt")
+API_ID = int(os.getenv("API_ID"))
+API_HASH = os.getenv("API_HASH")
+BOT_TOKEN = os.getenv("BOT_TOKEN")
+ADMIN_USERNAME = os.getenv("ADMIN_USERNAME")
+MAIN_GROUP = os.getenv("MAIN_GROUP")
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(message)s")
 logger = logging.getLogger(__name__)
@@ -20,7 +20,6 @@ logger = logging.getLogger(__name__)
 bot = TelegramClient("bot_session", API_ID, API_HASH).start(bot_token=BOT_TOKEN)
 
 def is_valid_format(text: str) -> bool:
-    import re
     pattern = re.compile(
         r"^(#Selling|#Buying)\s*[\r\n]+"
         r"Chain:\s*.+[\r\n]+"
@@ -51,50 +50,36 @@ async def filter_format(event):
 
 @bot.on(events.NewMessage(pattern="/start"))
 async def start_cmd(event):
-    await event.reply(
-        "✅ **Escrow Bot Active!**\n\n"
-        "/escrow @username - Naya deal group banaye\n"
-        "/complete - Deal complete (group mein)\n"
-        "/cancel - Deal cancel (group mein)\n"
-        "/status - Deal status (group mein)"
-    )
+    await event.reply("Bot Active!")
 
 @bot.on(events.NewMessage(pattern="/escrow"))
 async def escrow_cmd(event):
     msg = event.message
     sender = await event.get_sender()
     seller = f"@{sender.username}" if sender.username else sender.first_name
-    
     parts = msg.text.split()
     if len(parts) < 2:
-        await event.reply("❌ Usage: /escrow @buyer_username")
+        await event.reply("Usage: /escrow @buyer_username")
         return
-    
     buyer = parts[1]
     if not buyer.startswith("@"):
-        await event.reply("❌ Username @ se start hona chahiye")
+        await event.reply("Username @ se start hona chahiye")
         return
-    
     try:
         async with TelegramClient("user_session", API_ID, API_HASH) as userbot:
             await userbot.start()
             group = await userbot(CreateChatRequest(
                 users=[buyer, ADMIN_USERNAME],
-                title=f"🤝 Deal | {seller} & {buyer}"
+                title=f"Deal | {seller} & {buyer}"
             ))
-        
         await event.reply(
-            f"✅ **Group Created!**\n\n"
-            f"👤 Buyer: {buyer}\n"
-            f"👤 Seller: {seller}\n"
-            f"👨‍💼 Admin: {ADMIN_USERNAME}\n\n"
-            f"Check your chats - new group created!"
+            f"Group Created!\n\nBuyer: {buyer}\nSeller: {seller}\nAdmin: {ADMIN_USERNAME}"
         )
     except Exception as e:
-        await event.reply(f"❌ Error: {e}")
+        await event.reply(f"Error: {e}")
 
 async def main():
-    logger.info("🚀 Bot started!")
+    logger.info("Bot started!")
     await bot.run_until_disconnected()
 
 if __name__ == "__main__":
