@@ -9,7 +9,7 @@ from telethon.tl.functions.messages import CreateChatRequest
 load_dotenv()
 
 API_ID = int(os.getenv("32415663"))
-API_HASH = os.getenv("20df10ed337f4a6b54384859edea1556') 
+API_HASH = os.getenv("20df10ed337f4a6b54384859edea1556") 
 BOT_TOKEN = os.getenv("8614020088:AAGCqe2wIIEKimwVzunUIE0JTL3UPzECAH0")
 ADMIN_USERNAME = os.getenv("@Crypto_8099")
 MAIN_GROUP = os.getenv("@escrow_only_usdt")
