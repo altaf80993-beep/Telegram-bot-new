@@ -1,24 +1,26 @@
 import re
 import os
-import asyncio
 import logging
+from flask import Flask, request
 from dotenv import load_dotenv
-from telethon import TelegramClient, events
-from telethon.tl.functions.messages import CreateChatRequest
+from telegram import Update
+from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
+from telegram.constants import ChatMemberStatus
 
 load_dotenv()
 
-API_ID = int(os.getenv("API_ID"))
-API_HASH = os.getenv("API_HASH")
+# ============ CONFIG ============
 BOT_TOKEN = os.getenv("BOT_TOKEN")
-ADMIN_USERNAME = os.getenv("ADMIN_USERNAME")
-MAIN_GROUP = os.getenv("MAIN_GROUP")
+ADMIN_USERNAME = os.getenv("ADMIN_USERNAME", "@admin")
+ESCROW_GROUP_ID = os.getenv("MAIN_GROUP", "@escrow_group")
+PORT = int(os.getenv("PORT", 10000))
+WEBHOOK_URL = os.getenv("RENDER_EXTERNAL_URL", "")
 
+# ============ LOGGING ============
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(message)s")
 logger = logging.getLogger(__name__)
 
-bot = TelegramClient("bot_session", API_ID, API_HASH).start(bot_token=BOT_TOKEN)
-
+# ============ FORMAT CHECK ============
 def is_valid_format(text: str) -> bool:
     pattern = re.compile(
         r"^(#Selling|#Buying)\s*[\r\n]+"
@@ -31,56 +33,91 @@ def is_valid_format(text: str) -> bool:
     )
     return bool(pattern.match(text.strip()))
 
-@bot.on(events.NewMessage(chats=MAIN_GROUP))
-async def filter_format(event):
-    msg = event.message
-    if not msg.text or msg.text.startswith("/"):
+# ============ HANDLERS ============
+
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("Bot Active!\n/escrow @username - Escrow group link")
+
+async def escrow_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    sender = update.message.from_user
+    seller = f"@{sender.username}" if sender.username else sender.first_name
+    args = context.args
+    
+    if len(args) < 1:
+        await update.message.reply_text("Usage: /escrow @buyer_username")
         return
+    
+    buyer = args[0]
+    if not buyer.startswith("@"):
+        await update.message.reply_text("Buyer username @ se start hona chahiye")
+        return
+    
     try:
-        sender = await event.get_sender()
-        if sender.username and sender.username.lower() == ADMIN_USERNAME.strip("@").lower():
+        invite = await context.bot.create_chat_invite_link(
+            chat_id=ESCROW_GROUP_ID,
+            member_limit=3,
+            creates_join_request=False
+        )
+        await update.message.reply_text(
+            f"✅ ESCROW CREATED\n\n"
+            f"👤 Buyer: {buyer}\n"
+            f"👤 Seller: {seller}\n"
+            f"👨‍💼 Admin: {ADMIN_USERNAME}\n\n"
+            f"🔗 {invite.invite_link}\n\n"
+            f"Only 3 members can join."
+        )
+    except Exception as e:
+        await update.message.reply_text(f"Error: {e}")
+
+async def filter_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    msg = update.message
+    if not msg or not msg.text or msg.text.startswith("/"):
+        return
+    
+    try:
+        member = await context.bot.get_chat_member(msg.chat_id, msg.from_user.id)
+        if member.status in [ChatMemberStatus.ADMINISTRATOR, ChatMemberStatus.OWNER]:
             return
     except:
         pass
+    
     if not is_valid_format(msg.text):
         try:
             await msg.delete()
         except:
             pass
 
-@bot.on(events.NewMessage(pattern="/start"))
-async def start_cmd(event):
-    await event.reply("Bot Active!")
+# ============ FLASK APP ============
+flask_app = Flask(__name__)
 
-@bot.on(events.NewMessage(pattern="/escrow"))
-async def escrow_cmd(event):
-    msg = event.message
-    sender = await event.get_sender()
-    seller = f"@{sender.username}" if sender.username else sender.first_name
-    parts = msg.text.split()
-    if len(parts) < 2:
-        await event.reply("Usage: /escrow @buyer_username")
-        return
-    buyer = parts[1]
-    if not buyer.startswith("@"):
-        await event.reply("Username @ se start hona chahiye")
-        return
-    try:
-        async with TelegramClient("user_session", API_ID, API_HASH) as userbot:
-            await userbot.start()
-            group = await userbot(CreateChatRequest(
-                users=[buyer, ADMIN_USERNAME],
-                title=f"Deal | {seller} & {buyer}"
-            ))
-        await event.reply(
-            f"Group Created!\n\nBuyer: {buyer}\nSeller: {seller}\nAdmin: {ADMIN_USERNAME}"
-        )
-    except Exception as e:
-        await event.reply(f"Error: {e}")
+@flask_app.route("/", methods=["GET"])
+def home():
+    return "Bot Running!"
 
-async def main():
-    logger.info("Bot started!")
-    await bot.run_until_disconnected()
+@flask_app.route("/webhook", methods=["POST"])
+def webhook():
+    update = Update.de_json(request.get_json(), app.bot)
+    app.update_queue.put(update)
+    return "OK"
+
+# ============ MAIN ============
+app = Application.builder().token(BOT_TOKEN).build()
+
+app.add_handler(CommandHandler("start", start))
+app.add_handler(CommandHandler("escrow", escrow_command))
+app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, filter_messages))
+
+async def set_webhook():
+    if WEBHOOK_URL:
+        await app.bot.set_webhook(f"{WEBHOOK_URL}/webhook")
+        logger.info(f"Webhook set to {WEBHOOK_URL}/webhook")
 
 if __name__ == "__main__":
-    bot.loop.run_until_complete(main())
+    import asyncio
+    loop = asyncio.get_event_loop()
+    loop.run_until_complete(app.initialize())
+    loop.run_until_complete(set_webhook())
+    loop.run_until_complete(app.start())
+    
+    logger.info("Bot running with webhook...")
+    flask_app.run(host="0.0.0.0", port=PORT)
