@@ -97,14 +97,10 @@ if __name__ == "__main__":
     loop = asyncio.get_event_loop()
     loop.run_until_complete(app.initialize())
     
-    async def set_webhook():
-        webhook_url = os.getenv("RENDER_EXTERNAL_URL", "")
-        if webhook_url:
-            await app.bot.set_webhook(f"{webhook_url}/webhook")
-            logger.info(f"Webhook set to {webhook_url}/webhook")
+    loop.run_until_complete(app.bot.set_webhook(
+        url="https://telegram-bot-new-3-3jir.onrender.com/webhook"
+    ))
     
-    loop.run_until_complete(set_webhook())
     loop.run_until_complete(app.start())
-    
     logger.info("Bot running with webhook...")
     flask_app.run(host="0.0.0.0", port=PORT)
